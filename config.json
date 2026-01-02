@@ -1,14 +1,12 @@
 {
   "workflowApiVersion": "1.1",
   "type": "REST",
-
   "metaData": {
-    "icon": "https://customactivity-d2fhehdre4hhdpev.centralindia-01.azurewebsites.net/icon.png",
+    "icon": "public/icon.png",
     "category": "custom"
   },
 
   "applicationExtensionKey": "daytime-window-check",
-
   "lang": {
     "en-US": {
       "name": "Daytime Window Check",
@@ -25,7 +23,10 @@
       "url": "https://customactivity-d2fhehdre4hhdpev.centralindia-01.azurewebsites.net/activity/execute",
       "verb": "POST",
       "format": "json",
-      "timeout": 30000
+      "timeout": 30000,
+      "retryCount": 5,
+      "retryDelay": 1000,
+      "concurrentRequests": 8
     }
   },
 
@@ -49,6 +50,28 @@
       "url": "https://customactivity-d2fhehdre4hhdpev.centralindia-01.azurewebsites.net/index.html",
       "height": 600,
       "width": 600
+    }
+  },
+  "schema": {
+    "arguments": {
+      "execute": {
+        "inArguments": [
+          {
+            "subscriberKey": {
+              "dataType": "Text",
+              "isNullable": false,
+              "direction": "in"
+            }
+          },
+          {
+            "country": {
+              "dataType": "Text",
+              "isNullable": false,
+              "direction": "in"
+            }
+          }
+        ]
+      }
     }
   }
 }
