@@ -2,167 +2,103 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
-const axios = require('axios');
-const { v4: uuidv4 } = require('uuid');
+const { DateTime } = require('luxon');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT; // For Azure compatibility
+const PORT = process.env.PORT;
 
-// Middleware
+/* --------------------------------------------------
+   Middleware
+-------------------------------------------------- */
 app.use(cors());
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Health check endpoint
+/* --------------------------------------------------
+   JWT Validation Middleware (Journey Builder Security)
+-------------------------------------------------- */
+function verifyJwt(req, res, next) {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (e) {
+    return res.status(401).send('Invalid JWT');
+  }
+}
+
+/* --------------------------------------------------
+   Dedupe Cache (prevents duplicate retries)
+-------------------------------------------------- */
+const executionCache = new Set();
+
+/* --------------------------------------------------
+   Time Window Logic
+-------------------------------------------------- */
+const countryTimezones = {
+  india: 'Asia/Kolkata',
+  germany: 'Europe/Berlin',
+  usa: 'America/New_York',
+  uk: 'Europe/London',
+  slovakia: 'Europe/Bratislava'
+};
+
+function evaluateDaytimeWindow(countryName) {
+  if (!countryName) return { isWithinWindow: false };
+
+  const tz = countryTimezones[countryName.toLowerCase()];
+  if (!tz) return { isWithinWindow: false };
+
+  const nowLocal = DateTime.now().setZone(tz);
+  const startHour = 9;
+  const endHour = 18;
+
+  return {
+    isWithinWindow: nowLocal.hour >= startHour && nowLocal.hour < endHour,
+    currentHour: nowLocal.hour
+  };
+}
+
+/* --------------------------------------------------
+   Health Check
+-------------------------------------------------- */
 app.get('/health', (req, res) => res.send('OK'));
 
-// Function to get Marketing Cloud access token
-async function getAccessToken() {
-  const authUrl = 'https://mc654h8rl6ypfygmq-qvwq3yrjrq.auth.marketingcloudapis.com/v2/token';
-  const { CLIENT_ID, CLIENT_SECRET, ACCOUNT_ID } = process.env;
+/* --------------------------------------------------
+   EXECUTE ENDPOINT
+-------------------------------------------------- */
+app.post('/activity/execute', verifyJwt, (req, res) => {
+  const dedupeKey = req.body.activityId + ':' + req.body.definitionInstanceId;
 
-  const authResponse = await axios.post(authUrl, {
-    grant_type: 'client_credentials',
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
-    account_id: ACCOUNT_ID
-  });
-
-  return authResponse.data.access_token;
-}
-
-// Log to Data Extension
-async function logToDataExtension({ contactKey, automationKey, status, errorMessage, activityId, definitionInstanceId }) {
-  try {
-    const accessToken = await getAccessToken();
-    const payload = {
-      items: [
-        {
-          LogID: uuidv4(),
-          ContactKey: contactKey || '',
-          AutomationKey: automationKey || '',
-          TriggerTime: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-          Status: status,
-          ErrorMessage: errorMessage || '',
-          ActivityId: activityId || '',
-          DefinitionInstanceId: definitionInstanceId || '',
-          JourneyId: definitionInstanceId || '' // Using definitionInstanceId as JourneyId
-        }
-      ]
-    };
-
-    await axios.post(
-      `https://mc654h8rl6ypfygmq-qvwq3yrjrq.rest.marketingcloudapis.com/data/v1/async/dataextensions/key:69DE292E-4D00-44E3-AD84-01AE5CC68CF4/rows`,
-      payload,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-  } catch (err) {
-    console.error('❌ Logging to DE failed:', err.response?.data || err.message);
+  if (executionCache.has(dedupeKey)) {
+    return res.sendStatus(200);
   }
-}
+  executionCache.add(dedupeKey);
 
-// Get automations
-app.get('/automations', async (req, res) => {
-  try {
-    const accessToken = await getAccessToken();
-    const response = await axios.get(
-      'https://mc654h8rl6ypfygmq-qvwq3yrjrq.rest.marketingcloudapis.com/automation/v1/automations',
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
-      }
-    );
-    res.json(response.data);
-  } catch (err) {
-    console.error('❌ Error fetching automations:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to fetch automations' });
-  }
-});
+  const inArgs = Object.assign({}, ...req.body.inArguments);
+  const result = evaluateDaytimeWindow(inArgs.country);
 
-// Execute custom activity
-app.post('/activity/execute', async (req, res) => {
-  console.log('🔥 Execute called with payload:', JSON.stringify(req.body, null, 2));
-
-  const inArgs = req.body?.inArguments?.reduce((acc, curr) => ({ ...acc, ...curr }), {}) || {};
-  const contactKey = req.body?.keyValue || '';
-  const { automationKey } = inArgs;
-
-  const activityId = req.body?.activityId;
-  const definitionInstanceId = req.body?.definitionInstanceId;
-  const journeyId = definitionInstanceId; // Treating as journeyId
-
-  try {
-    if (!automationKey) {
-      await logToDataExtension({
-        contactKey,
-        automationKey: '',
-        status: 'Failed',
-        errorMessage: 'Missing automation key',
-        activityId,
-        definitionInstanceId
-      });
-      return res.status(400).json({ status: 'error', message: 'Missing automation key' });
+  return res.status(200).json([
+    {
+      isWithinWindow: result.isWithinWindow,
+      currentHour: result.currentHour
     }
-
-    const accessToken = await getAccessToken();
-    const automationUrl = `https://mc654h8rl6ypfygmq-qvwq3yrjrq.rest.marketingcloudapis.com/automation/v1/automations/key:${automationKey}/actions/runallonce`;
-
-    const triggerResponse = await axios.post(
-      automationUrl,
-      {},
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    console.log('✅ Automation Triggered:', triggerResponse.data);
-
-    await logToDataExtension({
-      contactKey,
-      automationKey,
-      status: 'Success',
-      errorMessage: '',
-      activityId,
-      definitionInstanceId
-    });
-
-    res.status(200).json({ status: 'success', message: 'Automation triggered successfully' });
-  } catch (error) {
-    console.error('❌ Error triggering automation:', error.response?.data || error.message);
-
-    await logToDataExtension({
-      contactKey,
-      automationKey,
-      status: 'Failed',
-      errorMessage: error.message,
-      activityId,
-      definitionInstanceId
-    });
-
-    res.status(500).json({ status: 'error', message: 'Failed to trigger automation' });
-  }
+  ]);
 });
 
-// Lifecycle endpoints
-app.post('/activity/save', (req, res) => res.status(200).json({ status: 'ok' }));
-app.post('/activity/validate', (req, res) => res.status(200).json({ status: 'ok' }));
-app.post('/activity/publish', (req, res) => res.status(200).json({ status: 'ok' }));
-app.post('/activity/stop', (req, res) => res.status(200).json({ status: 'ok' }));
+/* --------------------------------------------------
+   LIFECYCLE ENDPOINTS
+-------------------------------------------------- */
+app.post('/activity/save', verifyJwt, (req, res) => res.sendStatus(200));
+app.post('/activity/validate', verifyJwt, (req, res) => res.sendStatus(200));
+app.post('/activity/publish', verifyJwt, (req, res) => res.sendStatus(200));
+app.post('/activity/stop', verifyJwt, (req, res) => res.sendStatus(200));
 
-// Start server
+/* --------------------------------------------------
+   Start Server
+-------------------------------------------------- */
 app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`🚀 Custom Activity running on port ${PORT}`);
 });

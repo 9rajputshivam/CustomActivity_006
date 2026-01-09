@@ -4,43 +4,15 @@
   <meta charset="UTF-8" />
   <title>Country Send Window</title>
   <script src="https://unpkg.com/postmonger"></script>
-  <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
   <script src="customActivity.js" defer></script>
 </head>
-
 <body>
-
-<h2>Select Country for Sending Window</h2>
-
-<select id="country">
-  <option value="India">India</option>
-  <option value="Germany">Germany</option>
-  <option value="USA">USA</option>
-  <option value="UK">UK</option>
-</select>
-
-<button id="checkBtn">Check Send Window</button>
-
-<div id="status" style="margin-top:20px; padding:10px; background:#f4f4f4; border-radius:6px;">
-  Output will appear here...
-</div>
-
-<script>
-  document.getElementById("checkBtn").addEventListener("click", () => {
-    const country = document.getElementById("country").value;
-    const subscriberKey = "TEST_SUBSCRIBER"; // For testing
-
-    // Call the evaluateDaytimeWindow function from your customActivity.js
-    if (typeof evaluateDaytimeWindow === "function") {
-      const result = evaluateDaytimeWindow(subscriberKey, country);
-
-      document.getElementById("status").innerText =
-        JSON.stringify(result, null, 4);
-    } else {
-      document.getElementById("status").innerText = "evaluateDaytimeWindow not loaded.";
-    }
-  });
-</script>
-
+  <h2>Select Country</h2>
+  <select id="country">
+    <option value="India">India</option>
+    <option value="Germany">Germany</option>
+    <option value="USA">USA</option>
+    <option value="UK">UK</option>
+  </select>
 </body>
 </html>

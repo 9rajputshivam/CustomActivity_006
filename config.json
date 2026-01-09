@@ -1,16 +1,18 @@
 {
   "workflowApiVersion": "1.1",
   "type": "REST",
+
   "metaData": {
     "icon": "public/icon.png",
     "category": "custom"
   },
 
-  "applicationExtensionKey": "daytime-window-check",
+  "applicationExtensionKey": "aethereus.daytime.window.check",
+
   "lang": {
     "en-US": {
       "name": "Daytime Window Check",
-      "description": "Checks whether current time is within allowed sending window"
+      "description": "Checks if current time is within allowed window"
     }
   },
 
@@ -18,11 +20,16 @@
     "execute": {
       "inArguments": [
         { "subscriberKey": "{{Contact.Key}}" },
-        { "country": "" }
+        { "country": "{{Activity.country}}" }
+      ],
+      "outArguments": [
+        { "isWithinWindow": "" },
+        { "currentHour": "" }
       ],
       "url": "https://customactivity-d2fhehdre4hhdpev.centralindia-01.azurewebsites.net/activity/execute",
       "verb": "POST",
       "format": "json",
+      "useJwt": true,
       "timeout": 30000,
       "retryCount": 5,
       "retryDelay": 1000,
@@ -31,18 +38,9 @@
   },
 
   "configurationArguments": {
-    "save": {
-      "url": "https://customactivity-d2fhehdre4hhdpev.centralindia-01.azurewebsites.net/activity/save",
-      "verb": "POST"
-    },
-    "publish": {
-      "url": "https://customactivity-d2fhehdre4hhdpev.centralindia-01.azurewebsites.net/activity/publish",
-      "verb": "POST"
-    },
-    "validate": {
-      "url": "https://customactivity-d2fhehdre4hhdpev.centralindia-01.azurewebsites.net/activity/validate",
-      "verb": "POST"
-    }
+    "save": { "url": ".../activity/save", "verb": "POST", "useJwt": true },
+    "publish": { "url": ".../activity/publish", "verb": "POST", "useJwt": true },
+    "validate": { "url": ".../activity/validate", "verb": "POST", "useJwt": true }
   },
 
   "userInterfaces": {
@@ -52,24 +50,17 @@
       "width": 600
     }
   },
+
   "schema": {
     "arguments": {
       "execute": {
         "inArguments": [
-          {
-            "subscriberKey": {
-              "dataType": "Text",
-              "isNullable": false,
-              "direction": "in"
-            }
-          },
-          {
-            "country": {
-              "dataType": "Text",
-              "isNullable": false,
-              "direction": "in"
-            }
-          }
+          { "name": "subscriberKey", "dataType": "Text", "direction": "in" },
+          { "name": "country", "dataType": "Text", "direction": "in" }
+        ],
+        "outArguments": [
+          { "name": "isWithinWindow", "dataType": "Boolean", "direction": "out" },
+          { "name": "currentHour", "dataType": "Number", "direction": "out" }
         ]
       }
     }
