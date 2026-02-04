@@ -26,7 +26,7 @@
         { "isWithinWindow": "" },
         { "currentHour": "" }
       ],
-      "url": "https://customactivity-d2fhehdre4hhdpev.centralindia-01.azurewebsites.net/activity/execute",
+      "url": "/activity/execute",
       "verb": "POST",
       "format": "json",
       "useJwt": true,
@@ -45,7 +45,7 @@
 
   "userInterfaces": {
     "configModal": {
-      "url": "https://customactivity-d2fhehdre4hhdpev.centralindia-01.azurewebsites.net/index.html",
+      "url": "customactivity003-production.up.railway.app/index.html",
       "height": 600,
       "width": 600
     }
